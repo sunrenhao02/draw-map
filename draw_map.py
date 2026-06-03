@@ -63,8 +63,10 @@ class MapConfig:
     coastline_color: str = '#2C5F8A'
     ten_line_color: str = '#060d1b'
 
-    # --- 色标标签 ---
+    # --- 标签与输出（None 则使用模式默认值）---
     label: str = 'value'
+    title: Optional[str] = None               # 图表标题，如 '省级地图'
+    output: Optional[str] = None              # 输出文件名，如 '省级地图.png'
 
 
 # ---- 创建配置实例（日常改这里）----
@@ -271,10 +273,12 @@ def main() -> None:
     _setup_chinese_font()
 
     mode_files = _MODE_FILES[config.mode]
+    title = config.title or mode_files['title']
+    output = config.output or mode_files['output']
     print(f"当前模式: {config.mode}")
     print(f"  shapefile: {mode_files['shapefile']}")
     print(f"  CSV 数据: {mode_files['data']}")
-    print(f"  输出文件: {mode_files['output']}")
+    print(f"  输出文件: {output}")
 
     # 1. 读取数据
     df = _load_csv(mode_files['data'], 'index_value')
@@ -353,9 +357,9 @@ def main() -> None:
     ax_in.spines["geo"].set_edgecolor("#333333")
 
     # 9. 保存
-    plt.suptitle(mode_files['title'], fontsize=18, fontweight='bold', y=0.98)
-    plt.savefig(mode_files['output'], dpi=config.dpi, bbox_inches='tight')
-    print(f"\n已保存: {mode_files['output']}")
+    plt.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
+    plt.savefig(output, dpi=config.dpi, bbox_inches='tight')
+    print(f"\n已保存: {output}")
     plt.show()
 
 
