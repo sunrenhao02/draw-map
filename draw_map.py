@@ -26,8 +26,7 @@ import pandas as pd
 
 
 # ====================================================================
-# 配置
-# 日常换数据只需改下面这个 MapConfig，其余都有默认值
+# 配置（改数据只需修改 MapConfig）
 # ====================================================================
 
 @dataclass
@@ -54,7 +53,7 @@ class MapConfig:
     gis_dir: str = "gis_data"
     map_extent: list = field(default_factory=lambda: [78.5, 135, 17, 53])
     inset_extent: list = field(default_factory=lambda: [105, 122, 2, 25])
-    figsize: tuple = (18, 14)
+    figsize: tuple = (20, 14)
     dpi: int = 300
 
     # --- 颜色（一般不动）---
@@ -70,7 +69,7 @@ class MapConfig:
     output: Optional[str] = None              # 输出文件名，如 '省级地图.png'
 
 
-# ---- 创建配置实例（日常改这里）----
+# ---- 创建配置实例 ----
 config = MapConfig()
 
 # ---- 命令行参数覆盖模式 ----
@@ -78,7 +77,7 @@ if len(sys.argv) > 1 and sys.argv[1] in ('省', '市', '县'):
     config.mode = sys.argv[1]
 
 
-# ---- 模式→文件映射（不用改）----
+# ---- 模式→文件映射 ----
 _MODE_FILES = {
     '省': {'shapefile': '中国_省.shp', 'data': 'province_data.csv',
            'title': '省级地图', 'output': '省级地图.png'},
@@ -132,7 +131,7 @@ class _PreparedMapData:
 
 def _setup_chinese_font() -> Optional[str]:
     """设置中文字体。"""
-    zh_fonts = ['Microsoft YaHei', 'SimHei', 'SimSun',
+    zh_fonts = ['SimHei', 'Microsoft YaHei', 'SimSun',
                 'Noto Sans CJK SC', 'Source Han Sans CN']
     for name in zh_fonts:
         try:
@@ -339,7 +338,7 @@ def main() -> None:
     _annotate_top(ax, prep, 'index_value', config.n_top)
 
     # 7. 图例
-    cax = fig.add_axes([0.92, 0.25, 0.015, 0.5])
+    cax = fig.add_axes([0.06, 0.22, 0.015, 0.5])
     if config.scale == 'log':
         ticks = [t for t in config.log_ticks if vmin <= t <= vmax]
         cb = ColorbarBase(cax, cmap=cmap, norm=norm,
@@ -348,41 +347,64 @@ def main() -> None:
         cb = ColorbarBase(cax, cmap=cmap, norm=norm,
                           orientation='vertical', extend='max')
     cb.set_label(config.label, fontsize=12, fontweight='bold')
+    cb.ax.yaxis.set_ticks_position('left')
+    cb.ax.yaxis.set_label_position('left')
     cb.ax.tick_params(labelsize=10)
 
-    # 自定义图例：灰色 = 0，斜线 = 缺失
+    # 图例：灰色 = 0，斜线 = 缺失
     legend_elements = [
         Patch(facecolor=config.no_data_color, edgecolor=config.no_data_edge,
               label='值为 0'),
         Patch(facecolor='white', edgecolor=config.no_data_edge, hatch='///',
               label='无数据'),
     ]
-    ax.legend(handles=legend_elements, loc='lower left', fontsize=9,
-              framealpha=0.9, title='说明', title_fontsize=10)
+    ax.legend(handles=legend_elements, loc='lower left', fontsize=11,
+              framealpha=0.9, handlelength=2.5, handleheight=1.2,
+              title='图例', title_fontsize=13)
 
     # 地图范围 + 网格
     ax.set_extent(config.map_extent, crs=ccrs.PlateCarree())
     gl = ax.gridlines(crs=ccrs.PlateCarree(), draw_labels=True,
         linewidth=0.5, color='#999999', alpha=0.5, linestyle='-')
     gl.top_labels = False
-    gl.right_labels = False
+    gl.left_labels = False
+    gl.right_labels = True
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
     gl.xlabel_style = {"size": 12, "color": "#333333"}
     gl.ylabel_style = {"size": 12, "color": "#333333"}
+    ax.spines["geo"].set_linewidth(1.5)
+    ax.spines["geo"].set_edgecolor("#333333")
+
+    # 整体下移 3%
+    pos = ax.get_position()
+    ax.set_position([pos.x0, pos.y0 - 0.03, pos.width, pos.height])
 
     # 8. 南海插图
     ax_in = fig.add_axes([0.686, 0.187, 0.25, 0.235], projection=crs)
     ax_in.set_extent(config.inset_extent, crs=ccrs.PlateCarree())
+
+    # 获取 set_extent 后的实际尺寸，对齐到主图右下角
+    inset_pos = ax_in.get_position()
+    inset_width = inset_pos.x1 - inset_pos.x0
+    inset_height = inset_pos.y1 - inset_pos.y0
+
+    margin = 0.005
+    main_pos = ax.get_position()
+    new_x0 = main_pos.x1 - inset_width - margin
+    new_y0 = main_pos.y0 + margin
+    ax_in.set_position([new_x0, new_y0, inset_width, inset_height])
+
     _draw_regions(ax_in, md, prep)
     _draw_boundaries(ax_in, prep, lw=(1.0, 0.6, 1.2))
     _draw_shadows(ax_in, prep)
+    ax_in.spines["geo"].set_zorder(999)
     ax_in.spines["geo"].set_linewidth(1.5)
     ax_in.spines["geo"].set_edgecolor("#333333")
 
     # 9. 保存
-    plt.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
-    plt.savefig(output, dpi=config.dpi, bbox_inches='tight')
+    plt.suptitle(title, fontsize=30, fontweight='bold', y=0.93)
+    plt.savefig(output, dpi=config.dpi)
     print(f"\n已保存: {output}")
     plt.show()
 
