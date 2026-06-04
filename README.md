@@ -31,6 +31,9 @@ uv run python draw_map.py 县       # 县级地图
 | 河南省    | 7370        |
 | …         | …           |
 
+- `index_value >= 0` 为有效数据，`= 0` 显示为灰色
+- 合并后 Shapefile 中有但 CSV 中无匹配的区域自动填充为 `-1`（缺失，显示斜线纹理）
+
 各模式对应文件：
 
 | 模式 | CSV 文件 | 区域数 |
@@ -38,8 +41,6 @@ uv run python draw_map.py 县       # 县级地图
 | 省   | `province_data.csv` | 34 |
 | 市   | `city_data.csv`     | 375 |
 | 县   | `county_data.csv`   | ~3000 |
-
-只保留 `index_value > 0` 的行，缺失值或 ≤0 的区域在地图上显示为灰色。
 
 ## ⚙️ 配置
 
