@@ -21,6 +21,7 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from matplotlib.colors import LinearSegmentedColormap, Normalize, LogNorm
 from matplotlib.colorbar import ColorbarBase
 from matplotlib.axes import Axes
+from matplotlib.patches import Patch
 import pandas as pd
 
 
@@ -122,6 +123,7 @@ class _PreparedMapData:
     coastline_proj: gpd.GeoDataFrame
     ten_line_buffers: list
     land_buffers: list
+    regions_zero: gpd.GeoDataFrame
 
 
 # ====================================================================
@@ -148,7 +150,7 @@ def _setup_chinese_font() -> Optional[str]:
 def _load_csv(path: str, value_col: str) -> pd.DataFrame:
     """读取并过滤 CSV（仅保留正值）。"""
     df = pd.read_csv(path, encoding='utf-8-sig')
-    df = df[df[value_col] > 0].reset_index(drop=True)
+    df = df[df[value_col] >= 0].reset_index(drop=True)
     print(f"有效数据: {len(df)} 条")
     if df.empty:
         print("警告：过滤后无有效数据！")
@@ -199,7 +201,8 @@ def _prepare_map(map_data: _MapData, proj: ccrs.Projection) -> _PreparedMapData:
     """投影转换 + 缓冲区计算。"""
     regions_proj = map_data.regions.to_crs(proj)
     regions_data = regions_proj[regions_proj[map_data.value_col] > 0]
-    regions_nodata = regions_proj[regions_proj[map_data.value_col] <= 0]
+    regions_nodata = regions_proj[regions_proj[map_data.value_col] == -1]
+    regions_zero = regions_proj[regions_proj[map_data.value_col] == 0]
 
     ten_lines_proj = map_data.ten_lines.to_crs(proj)
     land_boundary_proj = map_data.land_boundary.to_crs(proj)
@@ -215,7 +218,7 @@ def _prepare_map(map_data: _MapData, proj: ccrs.Projection) -> _PreparedMapData:
     return _PreparedMapData(
         regions_proj, regions_data, regions_nodata,
         ten_lines_proj, land_boundary_proj, coastline_proj,
-        ten_line_buffers, land_buffers,
+        ten_line_buffers, land_buffers, regions_zero,
     )
 
 
@@ -224,11 +227,18 @@ def _prepare_map(map_data: _MapData, proj: ccrs.Projection) -> _PreparedMapData:
 # ====================================================================
 
 def _draw_regions(ax: Axes, md: _MapData, prep: _PreparedMapData) -> None:
-    """绘制所有区域（有数据 + 无数据）。"""
+    """绘制所有区域（有数据 + 零值 + 缺失）。"""
+    # -1（缺失）→ 白色底 + 斜线
     if not prep.regions_nodata.empty:
         prep.regions_nodata.plot(
+            ax=ax, color='white', edgecolor=md.no_data_edge,
+            hatch='///', linewidth=0.15, alpha=0.7, zorder=3)
+    # 0 → 灰色
+    if not prep.regions_zero.empty:
+        prep.regions_zero.plot(
             ax=ax, color=md.no_data_color, edgecolor=md.no_data_edge,
             linewidth=0.15, alpha=0.85, zorder=3)
+    # > 0 → 色阶
     if not prep.regions_data.empty:
         prep.regions_data.plot(
             ax=ax, column=md.value_col, cmap=md.cmap,
@@ -291,8 +301,12 @@ def main() -> None:
     merged = regions.merge(df, left_on='name', right_on='city_name', how='left')
     merged['index_value'] = merged['index_value'].fillna(-1)
     print(f"合并后区域数: {len(merged)}")
-    print(f"有数据的区域数: {(merged['index_value'] > 0).sum()}")
-    print(f"无数据的区域数: {(merged['index_value'] <= 0).sum()}")
+    has_data = (merged['index_value'] > 0).sum()
+    is_zero = (merged['index_value'] == 0).sum()
+    is_missing = (merged['index_value'] == -1).sum()
+    print(f"有数据的区域数 (>0): {has_data}")
+    print(f"零值区域数 (=0):  {is_zero}")
+    print(f"缺失区域数 (=-1):  {is_missing}")
 
     # 4. 构建色阶
     valid = merged[merged['index_value'] > 0]['index_value']
@@ -335,6 +349,16 @@ def main() -> None:
                           orientation='vertical', extend='max')
     cb.set_label(config.label, fontsize=12, fontweight='bold')
     cb.ax.tick_params(labelsize=10)
+
+    # 自定义图例：灰色 = 0，斜线 = 缺失
+    legend_elements = [
+        Patch(facecolor=config.no_data_color, edgecolor=config.no_data_edge,
+              label='值为 0'),
+        Patch(facecolor='white', edgecolor=config.no_data_edge, hatch='///',
+              label='无数据'),
+    ]
+    ax.legend(handles=legend_elements, loc='lower left', fontsize=9,
+              framealpha=0.9, title='说明', title_fontsize=10)
 
     # 地图范围 + 网格
     ax.set_extent(config.map_extent, crs=ccrs.PlateCarree())
